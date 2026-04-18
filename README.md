@@ -37,7 +37,7 @@ api2: SET tokens=0              ← 2リクエスト許可されてしまう
 
 ```bash
 # docker compose で値を変えて起動
-CAPACITY=100 REFILL_RATE=5 docker compose up --build
+CAPACITY=100 REFILL_RATE=5 docker compose -f redis.docker-compose.yml up --build
 
 # ローカル単体起動
 CAPACITY=5 REFILL_RATE=0.5 go run .
@@ -46,12 +46,41 @@ CAPACITY=5 REFILL_RATE=0.5 go run .
 ## 動作確認
 
 ```bash
-docker compose up --build
+# Redis版 (複数インスタンスでトークン状態を共有)
+docker compose -f redis.docker-compose.yml up --build
 
-# 連打して 200 → 429 の遷移を確認
+# Memory版 (インスタンスごとに独立したカウンター)
+docker compose -f momery.docker-compose.yml up --build
+```
+
+起動後、15回連打して 200 → 429 の遷移を確認:
+
+```bash
 for i in $(seq 1 15); do
-  curl -s -o /dev/null -w "%{http_code} " -H "X-User-ID: alice" http://localhost:8000/ping
+  response=$(curl -s -w "\n%{http_code}" -H "X-User-ID: alice" http://localhost:8000/ping)
+  printf "[%s] %s\n" "$(echo "$response" | tail -1)" "$(echo "$response" | head -1)"
 done
+```
+
+**Redis版** (CAPACITY=10): 10回で制限、api1/api2をまたいでカウントが共有される
+
+```
+[200] pong from api1
+[200] pong from api2
+...
+[200] pong from api2   # 10回目
+[429] 429 Too Many Requests
+[429] 429 Too Many Requests
+...
+```
+
+**Memory版** (CAPACITY=10): インスタンスごとに独立カウンターなので15回では制限に達しない
+
+```
+[200] pong from api1
+[200] pong from api2
+...
+[200] pong from api1   # 15回目も200
 ```
 
 レスポンスヘッダー:
