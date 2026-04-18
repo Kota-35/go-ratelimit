@@ -8,7 +8,6 @@ import (
 )
 
 // luaScript は GET → 計算 → SET を atomic に実行する Lua スクリプト。
-// token_bucket.go の advance と同じ計算式を Redis 側で再現している。
 //
 // KEYS[1]  : ハッシュキー (例: "user:alice:rl")
 // ARGV[1]  : capacity  (float)

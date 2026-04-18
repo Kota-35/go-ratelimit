@@ -52,7 +52,7 @@ func TestRedisStore_DifferentKeysAreIndependent(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < int(testCfg.Capacity); i++ {
-		store.Allow(ctx, "user:alice:rl", testCfg) //nolint
+		store.Allow(ctx, "user:alice:rl", testCfg)
 	}
 
 	res, err := store.Allow(ctx, "user:bob:rl", testCfg)

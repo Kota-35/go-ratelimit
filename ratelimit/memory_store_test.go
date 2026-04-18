@@ -46,7 +46,7 @@ func TestMemoryStore_DifferentKeysAreIndependent(t *testing.T) {
 
 	// alice のバケツを使い切る
 	for i := 0; i < int(testCfg.Capacity); i++ {
-		store.Allow(ctx, "user:alice:rl", testCfg) //nolint
+		store.Allow(ctx, "user:alice:rl", testCfg)
 	}
 
 	// bob は影響を受けない

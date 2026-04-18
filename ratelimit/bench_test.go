@@ -22,7 +22,7 @@ func BenchmarkMemoryStore_Allow(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		store.Allow(ctx, "bench:user", cfg) //nolint
+		store.Allow(ctx, "bench:user", cfg)
 	}
 }
 
@@ -35,7 +35,7 @@ func BenchmarkMemoryStore_AllowParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			store.Allow(ctx, "bench:user", cfg) //nolint
+			store.Allow(ctx, "bench:user", cfg)
 		}
 	})
 }
@@ -51,7 +51,7 @@ func BenchmarkRedisStore_Allow(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		store.Allow(ctx, "bench:user", cfg) //nolint
+		store.Allow(ctx, "bench:user", cfg)
 	}
 }
 
@@ -65,7 +65,7 @@ func BenchmarkRedisStore_AllowParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			store.Allow(ctx, "bench:user", cfg) //nolint
+			store.Allow(ctx, "bench:user", cfg)
 		}
 	})
 }
