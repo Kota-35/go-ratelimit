@@ -50,8 +50,11 @@ func (s *MemoryStore) Allow(_ context.Context, key string, cfg Config) (Result, 
 		}, nil
 	}
 
-	// 次の1トークンが補充されるまでのミリ秒
-	resetMs := int64(math.Ceil((1.0-b.tokens)/cfg.RefillRate*1000))
+	// 次の1トークンが補充されるまでのミリ秒を計算
+	// 単位に注目!!
+	// 1/refill_rate で 1トークンあたりの補充時間
+	// => (1.0 - tokens)/refill_rate は 次のトークンまでの秒数
+	resetMs := int64(math.Ceil((1.0 - b.tokens) / cfg.RefillRate * 1000))
 	return Result{
 		Allowed:   false,
 		Remaining: 0,

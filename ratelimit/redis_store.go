@@ -9,6 +9,17 @@ import (
 
 // luaScript は GET → 計算 → SET を atomic に実行する Lua スクリプト。
 //
+// Why: Go側で HGET -> 計算 -> SET の3ステップに分けて書かずに Lua スクリプトにしているのか？
+// Luaスクリプトにすると Redisがシングルスレッドで全行を中断なく実行するから
+// ```
+// 時刻T1: goroutine A が HGET -> tokens=1 を読む
+// 時刻T2: goroutine B が HGET -> tokens=1 を読む // Aがまだ書いていない
+// 時刻T3: A が計算 -> tokens-1=0 -> SET
+// 時刻T4: B が計算 -> tokens-1=0 -> SET // 本来は拒否すべきなのに通過してしまう。
+// ```
+// これがTOCTOU(Time of Check to Time of Use)競合
+// ref: https://ja.wikipedia.org/wiki/Time-of-check_to_time-of-use
+//
 // KEYS[1]  : ハッシュキー (例: "user:alice:rl")
 // ARGV[1]  : capacity  (float)
 // ARGV[2]  : refill_rate (tokens/sec, float)
@@ -23,6 +34,8 @@ local capacity = tonumber(ARGV[1])
 local refill_rate = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 
+-- data[1]がnil = Redisにキーが存在しない = 初回リクエスト
+-- tokens を capacity で一杯にするのは新規ユーザーは制限なしでスタートできるから
 if not tokens then
     tokens = capacity
     last_refill = now
