@@ -97,14 +97,31 @@ go test ./ratelimit/... -race -v
 go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 ```
 
-ベンチマーク結果 (Apple M2 Pro):
+ベンチマーク結果 (Apple M2 Pro, `-benchtime=5s -cpu=1,4`):
 
-```
-BenchmarkMemoryStore_Allow             71 ns/op    0 allocs/op
-BenchmarkMemoryStore_AllowParallel-4  161 ns/op    0 allocs/op  ← mutex 競合で2.3倍悪化
-BenchmarkRedisStore_Allow           92204 ns/op  843 allocs/op
-BenchmarkRedisStore_AllowParallel-4 93333 ns/op  843 allocs/op  ← Lua atomic により並列でも劣化なし
-```
+| ベンチマーク | CPU数 | ns/op (1回あたりの処理時間) | B/op (1回あたりのヒープ使用量) | allocs/op (1回あたりのメモリ確保回数) |
+|---|---|---|---|---|
+| MemoryStore_Allow | 1 | 71.09 | 0 | 0 |
+| MemoryStore_Allow | 4 | 70.18 | 0 | 0 |
+| MemoryStore_AllowParallel | 1 | 69.78 | 0 | 0 |
+| MemoryStore_AllowParallel | 4 | 157.5 | 0 | 0 |
+| RedisStore_Allow | 1 | 86,448 | 208,524 | 843 |
+| RedisStore_Allow | 4 | 87,751 | 208,578 | 843 |
+| RedisStore_AllowParallel | 1 | 85,499 | 208,524 | 843 |
+| RedisStore_AllowParallel | 4 | 88,689 | 208,605 | 843 |
+| Middleware_Allow | 1 | 736.9 | 1,088 | 15 |
+| Middleware_Allow | 4 | 660.3 | 1,088 | 15 |
+| Middleware_AllowParallel | 1 | 743.5 | 1,088 | 15 |
+| Middleware_AllowParallel | 4 | 583.9 | 1,088 | 15 |
 
-MemoryStore は 4 並列で約 2.3 倍遅くなっているが、RedisStore は並列数に関わらずほぼ一定。
-Redis の Lua がシリアライズを保証しているため競合が起きないことがわかる。
+**MemoryStore**
+
+in-memory なのでネットワーク IO がなく最速（約 71 ns/op）。ただし並列時は Mutex の待ち時間が発生するため、4 並列で約 2.3 倍悪化する。
+
+**RedisStore**
+
+Redis はシングルスレッドで処理するため、複数 goroutine から同時にリクエストが来ても Redis 側でキューイングされる。そのため並列化しても速度がほぼ変わらない。一方でネットワーク IO や Lua スクリプトの送受信コストがあるため、MemoryStore より約 1200 倍遅い（約 86,000 ns/op）。複数サーバー間でトークン状態を共有できるのはこのコストの対価。
+
+**Middleware**
+
+`Allow()` の呼び出しに加え、`fmt.Sprintf` によるキー生成・`strconv` による数値→文字列変換・レスポンスヘッダーへのセットなどのアロケーションが発生する。MemoryStore 単体の約 10 倍（約 737 ns/op）、15 allocs/op はこれらのコストを反映している。
