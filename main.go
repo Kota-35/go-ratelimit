@@ -39,8 +39,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
-		hostname, _ := os.Hostname()
-		fmt.Fprintf(w, "pong from %s\n", hostname)
+		name := os.Getenv("SERVER_NAME")
+		w.Header().Set("X-Server-ID", name)
+		fmt.Fprintf(w, "pong from %s\n", name)
 	})
 
 	handler := ratelimit.NewMiddleware(store, cfg)(mux)
