@@ -5,9 +5,7 @@ Token Bucket アルゴリズムを使ったレートリミッターの実装。
 
 ## 構成
 
-```
-Client → nginx (round-robin) → api1 / api2 → Redis
-```
+![architecture](docs/architecture.png)
 
 nginx がリクエストを api1/api2 に振り分け、両サーバーが同一の Redis を参照してトークン状態を共有する。
 
