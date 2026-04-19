@@ -7,23 +7,23 @@ import (
 	"time"
 )
 
-type bucketState struct {
+type bucketStateMutex struct {
 	tokens     float64
 	lastRefill time.Time
 }
 
-type MemoryStore struct {
+type MemoryStoreMutex struct {
 	mu      sync.Mutex
-	buckets map[string]*bucketState
+	buckets map[string]*bucketStateMutex
 }
 
-func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{
-		buckets: make(map[string]*bucketState),
+func NewMemoryStoreMutex() *MemoryStoreMutex {
+	return &MemoryStoreMutex{
+		buckets: make(map[string]*bucketStateMutex),
 	}
 }
 
-func (s *MemoryStore) Allow(_ context.Context, key string, cfg Config) (Result, error) {
+func (s *MemoryStoreMutex) Allow(_ context.Context, key string, cfg Config) (Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -32,7 +32,7 @@ func (s *MemoryStore) Allow(_ context.Context, key string, cfg Config) (Result, 
 	b, ok := s.buckets[key]
 	if !ok {
 		// 初回: バケツ満タンで登録
-		b = &bucketState{tokens: cfg.Capacity, lastRefill: now}
+		b = &bucketStateMutex{tokens: cfg.Capacity, lastRefill: now}
 		s.buckets[key] = b
 	}
 

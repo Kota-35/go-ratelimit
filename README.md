@@ -97,29 +97,57 @@ go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 
 ベンチマーク結果 (Apple M2 Pro, `-benchtime=5s -cpu=1,4`):
 
-| ベンチマーク | CPU数 | ns/op (1回あたりの処理時間) | B/op (1回あたりのヒープ使用量) | allocs/op (1回あたりのメモリ確保回数) |
+| ベンチマーク | CPU数 | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-| MemoryStore_Allow | 1 | 71.09 | 0 | 0 |
-| MemoryStore_Allow | 4 | 70.18 | 0 | 0 |
-| MemoryStore_AllowParallel | 1 | 69.78 | 0 | 0 |
-| MemoryStore_AllowParallel | 4 | 157.5 | 0 | 0 |
-| RedisStore_Allow | 1 | 86,448 | 208,524 | 843 |
-| RedisStore_Allow | 4 | 87,751 | 208,578 | 843 |
-| RedisStore_AllowParallel | 1 | 85,499 | 208,524 | 843 |
-| RedisStore_AllowParallel | 4 | 88,689 | 208,605 | 843 |
-| Middleware_Allow | 1 | 736.9 | 1,088 | 15 |
-| Middleware_Allow | 4 | 660.3 | 1,088 | 15 |
-| Middleware_AllowParallel | 1 | 743.5 | 1,088 | 15 |
-| Middleware_AllowParallel | 4 | 583.9 | 1,088 | 15 |
+| MemoryStoreMutex_Allow | 1 | 70.43 | 0 | 0 |
+| MemoryStoreMutex_Allow | 4 | 70.14 | 0 | 0 |
+| MemoryStoreMutex_AllowParallel | 1 | 70.10 | 0 | 0 |
+| MemoryStoreMutex_AllowParallel | 4 | 158.7 | 0 | 0 |
+| MemoryStoreMutex_AllowParallelMultiUser | 1 | 69.91 | 0 | 0 |
+| MemoryStoreMutex_AllowParallelMultiUser | 4 | 156.7 | 0 | 0 |
+| MemoryStoreSyncMap_Allow | 1 | 107.0 | 64 | 2 |
+| MemoryStoreSyncMap_Allow | 4 | 100.0 | 64 | 2 |
+| MemoryStoreSyncMap_AllowParallel | 1 | 107.6 | 64 | 2 |
+| MemoryStoreSyncMap_AllowParallel | 4 | 164.5 | 64 | 2 |
+| MemoryStoreSyncMap_AllowParallelMultiUser | 1 | 109.0 | 64 | 2 |
+| MemoryStoreSyncMap_AllowParallelMultiUser | 4 | 37.76 | 64 | 2 |
+| RedisStore_Allow | 1 | 92,149 | 208,524 | 843 |
+| RedisStore_Allow | 4 | 89,337 | 208,578 | 843 |
+| RedisStore_AllowParallel | 1 | 87,386 | 208,524 | 843 |
+| RedisStore_AllowParallel | 4 | 92,562 | 208,603 | 843 |
+| Middleware_Allow | 1 | 805.0 | 1,088 | 15 |
+| Middleware_Allow | 4 | 694.5 | 1,088 | 15 |
+| Middleware_AllowParallel | 1 | 778.1 | 1,088 | 15 |
+| Middleware_AllowParallel | 4 | 592.8 | 1,088 | 15 |
 
-**MemoryStore**
+**MemoryStoreMutex**
 
-in-memory なのでネットワーク IO がなく最速（約 71 ns/op）。ただし並列時は Mutex の待ち時間が発生するため、4 並列で約 2.3 倍悪化する。
+in-memory なのでネットワーク IO がなく最速（約 70 ns/op）。グローバルな `sync.Mutex` 1 本で全キーを直列化するため、4 並列では約 2.3 倍悪化する。ユーザーが異なっていても同じロックを取り合う点は変わらない（MultiUser でも Parallel と同様に劣化）。
 
 **RedisStore**
 
-Redis はシングルスレッドで処理するため、複数 goroutine から同時にリクエストが来ても Redis 側でキューイングされる。そのため並列化しても速度がほぼ変わらない。一方でネットワーク IO や Lua スクリプトの送受信コストがあるため、MemoryStore より約 1200 倍遅い（約 86,000 ns/op）。複数サーバー間でトークン状態を共有できるのはこのコストの対価。
+Redis はシングルスレッドで処理するため、複数 goroutine から同時にリクエストが来ても Redis 側でキューイングされる。そのため並列化しても速度がほぼ変わらない。一方でネットワーク IO や Lua スクリプトの送受信コストがあるため、MemoryStore より約 1,300 倍遅い（約 90,000 ns/op）。複数サーバー間でトークン状態を共有できるのはこのコストの対価。
 
 **Middleware**
 
-`Allow()` の呼び出しに加え、`fmt.Sprintf` によるキー生成・`strconv` による数値→文字列変換・レスポンスヘッダーへのセットなどのアロケーションが発生する。MemoryStore 単体の約 10 倍（約 737 ns/op）、15 allocs/op はこれらのコストを反映している。
+`Allow()` の呼び出しに加え、`fmt.Sprintf` によるキー生成・`strconv` による数値→文字列変換・レスポンスヘッダーへのセットなどのアロケーションが発生する。MemoryStore 単体の約 11 倍（約 805 ns/op）、15 allocs/op はこれらのコストを反映している。
+
+---
+
+### +α: sync.Map によるキー分散の検証
+
+> このリポジトリの主題は「複数サーバー間で状態を共有する分散レートリミッター」であり、シングルサーバーの並列性能は本質的な関心事ではない。ただし `sync.Mutex` のグローバルロック問題は概念として重要なので、比較用に `MemoryStoreSyncMap` を実装して計測した。
+
+`sync.Mutex` 版はキーが異なっていても 1 本のグローバルロックで直列化されるため、ユーザー数が増えても並列スケーラビリティは改善しない。
+
+`sync.Map` + per-bucket lock 版は、異なるキーのバケツが独立したロックを持つため、ユーザーごとの処理が互いにブロックしない。
+
+```
+                                       cpu=1      cpu=4      変化
+Mutex_AllowParallelMultiUser          69.9 ns   156.7 ns   +2.2x 遅化
+SyncMap_AllowParallelMultiUser       109.0 ns    37.8 ns   +2.9x 高速化
+```
+
+MultiUser-4 の 37.8 ns/op は「1 操作が 38 ns で終わった」ではなく、4 goroutine が並列に動くことで **スループットが約 3 倍になった** 結果である（`ns/op = 経過wall時間 ÷ 総ops数` のため、並列化が効くほど値が小さくなる）。
+
+ただし `sync.Map` 版は 64 B/op・2 allocs/op のヒープアロケーションが発生する。`LoadOrStore` で毎回 `*bucketState` を生成してから破棄するコストであり、単一ユーザーへの連続アクセスでは Mutex 版より遅い（107 ns vs 70 ns）。キー数が多く競合が分散するケースでのみ有利になる。

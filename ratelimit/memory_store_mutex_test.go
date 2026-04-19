@@ -9,12 +9,10 @@ import (
 	"go-ratelimit/ratelimit"
 )
 
-var testCfg = ratelimit.Config{Capacity: 5, RefillRate: 1}
-
 // --- 基本動作 ---
 
-func TestMemoryStore_AllowsUpToCapacity(t *testing.T) {
-	store := ratelimit.NewMemoryStore()
+func TestMemoryStoreMutex_AllowsUpToCapacity(t *testing.T) {
+	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
 
 	for i := 0; i < int(testCfg.Capacity); i++ {
@@ -40,8 +38,8 @@ func TestMemoryStore_AllowsUpToCapacity(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_DifferentKeysAreIndependent(t *testing.T) {
-	store := ratelimit.NewMemoryStore()
+func TestMemoryStoreMutex_DifferentKeysAreIndependent(t *testing.T) {
+	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
 
 	// alice のバケツを使い切る
@@ -59,8 +57,8 @@ func TestMemoryStore_DifferentKeysAreIndependent(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_RemainingDecreases(t *testing.T) {
-	store := ratelimit.NewMemoryStore()
+func TestMemoryStoreMutex_RemainingDecreases(t *testing.T) {
+	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
 
 	prev := int(testCfg.Capacity)
@@ -75,8 +73,8 @@ func TestMemoryStore_RemainingDecreases(t *testing.T) {
 
 // --- 競合状態の検証 (go test -race) ---
 
-func TestMemoryStore_Race(t *testing.T) {
-	store := ratelimit.NewMemoryStore()
+func TestMemoryStoreMutex_Race(t *testing.T) {
+	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
 
 	const goroutines = 100

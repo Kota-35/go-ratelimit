@@ -33,7 +33,7 @@ func main() {
 		store = ratelimit.NewRedisStore(rdb)
 		log.Printf("using RedisStore: %s", redisAddr)
 	} else {
-		store = ratelimit.NewMemoryStore()
+		store = ratelimit.NewMemoryStoreSyncMap()
 		log.Println("using MemoryStore")
 	}
 
