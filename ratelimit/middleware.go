@@ -29,7 +29,10 @@ func NewMiddleware(store Store, cfg Config) func(http.Handler) http.Handler {
 			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetMs, 10))
 
 			if !result.Allowed {
-				w.Header().Set("Retry-After", strconv.FormatInt(result.ResetMs/1000+1, 10))
+				// NOTE: Retry-After は RFC 7231 で整数秒と定義されている
+				// https://datatracker.ietf.org/doc/html/rfc7231
+				retryAfter := (result.ResetMs + 999) / 1000
+				w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
 				return
 			}
