@@ -48,7 +48,7 @@ CAPACITY=5 REFILL_RATE=0.5 go run .
 docker compose -f redis.docker-compose.yml up --build
 
 # Memory版 (インスタンスごとに独立したカウンター)
-docker compose -f momery.docker-compose.yml up --build
+docker compose -f memory.docker-compose.yml up --build
 ```
 
 起動後、15回連打して 200 → 429 の遷移を確認:
