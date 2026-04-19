@@ -12,11 +12,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func newTestRedisStore(t *testing.T) (*ratelimit.RedisStore, *miniredis.Miniredis) {
+func newTestRedisStore(t *testing.T) (*ratelimit.RedisStoreTokenBucket, *miniredis.Miniredis) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	return ratelimit.NewRedisStore(rdb), mr
+	return ratelimit.NewRedisStoreTokenBucket(rdb), mr
 }
 
 // --- 基本動作 ---

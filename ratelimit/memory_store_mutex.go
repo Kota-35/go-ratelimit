@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -24,6 +25,10 @@ func NewMemoryStoreMutex() *MemoryStoreMutex {
 }
 
 func (s *MemoryStoreMutex) Allow(_ context.Context, key string, cfg Config) (Result, error) {
+	c, ok := cfg.(TokenBucketConfig)
+	if !ok {
+		return Result{}, fmt.Errorf("FixedWindowStore: got %T, want FixedWindowConfig", cfg)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -32,13 +37,13 @@ func (s *MemoryStoreMutex) Allow(_ context.Context, key string, cfg Config) (Res
 	b, ok := s.buckets[key]
 	if !ok {
 		// 初回: バケツ満タンで登録
-		b = &bucketStateMutex{tokens: cfg.Capacity, lastRefill: now}
+		b = &bucketStateMutex{tokens: c.Capacity, lastRefill: now}
 		s.buckets[key] = b
 	}
 
 	// 経過時間 × refillRate でトークンを補充し Capacity でキャップ
 	elapsed := now.Sub(b.lastRefill).Seconds()
-	b.tokens = math.Min(cfg.Capacity, b.tokens+elapsed*cfg.RefillRate)
+	b.tokens = math.Min(c.Capacity, b.tokens+elapsed*c.RefillRate)
 	b.lastRefill = now
 
 	if b.tokens >= 1.0 {
@@ -54,7 +59,7 @@ func (s *MemoryStoreMutex) Allow(_ context.Context, key string, cfg Config) (Res
 	// 単位に注目!!
 	// 1/refill_rate で 1トークンあたりの補充時間
 	// => (1.0 - tokens)/refill_rate は 次のトークンまでの秒数
-	resetMs := int64(math.Ceil((1.0 - b.tokens) / cfg.RefillRate * 1000))
+	resetMs := int64(math.Ceil((1.0 - b.tokens) / c.RefillRate * 1000))
 	return Result{
 		Allowed:   false,
 		Remaining: 0,

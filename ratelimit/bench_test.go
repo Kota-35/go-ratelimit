@@ -20,7 +20,7 @@ import (
 func BenchmarkMemoryStoreMutex_Allow(b *testing.B) {
 	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: float64(b.N + 1), RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: float64(b.N + 1), RefillRate: 1e9}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -32,7 +32,7 @@ func BenchmarkMemoryStoreMutex_Allow(b *testing.B) {
 func BenchmarkMemoryStoreMutex_AllowParallel(b *testing.B) {
 	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -46,7 +46,7 @@ func BenchmarkMemoryStoreMutex_AllowParallel(b *testing.B) {
 func BenchmarkMemoryStoreMutex_AllowParallelMultiUser(b *testing.B) {
 	store := ratelimit.NewMemoryStoreMutex()
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 	var n atomic.Int64
 
 	b.ResetTimer()
@@ -64,7 +64,7 @@ func BenchmarkMemoryStoreMutex_AllowParallelMultiUser(b *testing.B) {
 func BenchmarkMemoryStoreSyncMap_Allow(b *testing.B) {
 	store := ratelimit.NewMemoryStoreSyncMap()
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: float64(b.N + 1), RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: float64(b.N + 1), RefillRate: 1e9}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -76,7 +76,7 @@ func BenchmarkMemoryStoreSyncMap_Allow(b *testing.B) {
 func BenchmarkMemoryStoreSyncMap_AllowParallel(b *testing.B) {
 	store := ratelimit.NewMemoryStoreSyncMap()
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -90,7 +90,7 @@ func BenchmarkMemoryStoreSyncMap_AllowParallel(b *testing.B) {
 func BenchmarkMemoryStoreSyncMap_AllowParallelMultiUser(b *testing.B) {
 	store := ratelimit.NewMemoryStoreSyncMap()
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 	var n atomic.Int64
 
 	b.ResetTimer()
@@ -107,9 +107,9 @@ func BenchmarkMemoryStoreSyncMap_AllowParallelMultiUser(b *testing.B) {
 func BenchmarkRedisStore_Allow(b *testing.B) {
 	mr := miniredis.RunT(b)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	store := ratelimit.NewRedisStore(rdb)
+	store := ratelimit.NewRedisStoreTokenBucket(rdb)
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -120,9 +120,9 @@ func BenchmarkRedisStore_Allow(b *testing.B) {
 func BenchmarkRedisStore_AllowParallel(b *testing.B) {
 	mr := miniredis.RunT(b)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	store := ratelimit.NewRedisStore(rdb)
+	store := ratelimit.NewRedisStoreTokenBucket(rdb)
 	ctx := context.Background()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -136,7 +136,7 @@ func BenchmarkRedisStore_AllowParallel(b *testing.B) {
 
 func BenchmarkMiddleware_Allow(b *testing.B) {
 	store := ratelimit.NewMemoryStoreMutex()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	handler := ratelimit.NewMiddleware(store, cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -154,7 +154,7 @@ func BenchmarkMiddleware_Allow(b *testing.B) {
 
 func BenchmarkMiddleware_AllowParallel(b *testing.B) {
 	store := ratelimit.NewMemoryStoreMutex()
-	cfg := ratelimit.Config{Capacity: 1e12, RefillRate: 1e9}
+	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	handler := ratelimit.NewMiddleware(store, cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

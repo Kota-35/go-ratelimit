@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -64,25 +65,29 @@ redis.call('EXPIRE', KEYS[1], 3600)
 return {allowed, math.floor(tokens), reset_ms}
 `
 
-type RedisStore struct {
+type RedisStoreTokenBucket struct {
 	client *redis.Client
 	script *redis.Script
 }
 
-func NewRedisStore(client *redis.Client) *RedisStore {
-	return &RedisStore{
+func NewRedisStoreTokenBucket(client *redis.Client) *RedisStoreTokenBucket {
+	return &RedisStoreTokenBucket{
 		client: client,
 		script: redis.NewScript(luaScript),
 	}
 }
 
-func (s *RedisStore) Allow(ctx context.Context, key string, cfg Config) (Result, error) {
+func (s *RedisStoreTokenBucket) Allow(ctx context.Context, key string, cfg Config) (Result, error) {
+	c, ok := cfg.(TokenBucketConfig)
+	if !ok {
+		return Result{}, fmt.Errorf("FixedWindowStore: got %T, want FixedWindowConfig", cfg)
+	}
 	now := time.Now().UnixMilli()
 
 	// EVALSHA → キャッシュミス時は自動で EVAL にフォールバック
 	res, err := s.script.Run(ctx, s.client,
 		[]string{key},
-		cfg.Capacity, cfg.RefillRate, now,
+		c.Capacity, c.RefillRate, now,
 	).Int64Slice()
 	if err != nil {
 		return Result{}, err
