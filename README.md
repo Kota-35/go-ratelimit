@@ -95,7 +95,8 @@ go test ./ratelimit/... -race -v
 go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 ```
 
-ベンチマーク結果 (Apple M2 Pro, `-benchtime=5s -cpu=1,4`):
+<details>
+<summary>ベンチマーク結果 (Apple M2 Pro, <code>-benchtime=5s -cpu=1,4</code>)</summary>
 
 | ベンチマーク | CPU数 | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
@@ -119,6 +120,8 @@ go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 | Middleware_Allow | 4 | 694.5 | 1,088 | 15 |
 | Middleware_AllowParallel | 1 | 778.1 | 1,088 | 15 |
 | Middleware_AllowParallel | 4 | 592.8 | 1,088 | 15 |
+
+</details>
 
 **MemoryStoreMutex**
 
