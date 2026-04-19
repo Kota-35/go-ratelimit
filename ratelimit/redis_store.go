@@ -57,6 +57,10 @@ end
 redis.call('HSET', KEYS[1], 'tokens', tokens, 'last_refill', now)
 redis.call('EXPIRE', KEYS[1], 3600)
 
+-- math.floor(tokens)
+-- 精度のため tokens　は内部で少数で保持
+-- しかし、残り何回りクエストできるかは整数で残したい(remaining)
+-- math.ceilだと ex. 1.79 -> 2 になり加増に見せてしまうので floor
 return {allowed, math.floor(tokens), reset_ms}
 `
 
