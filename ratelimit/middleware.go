@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	"go-ratelimit/ratelimit/limiter"
 )
 
-// NewMiddleware は Store を注入した HTTP ミドルウェアを返す。
+// NewMiddleware は Limiter を注入した HTTP ミドルウェアを返す。
 // リクエストヘッダー X-User-ID でユーザーを識別し、
 // 許可時は X-RateLimit-Remaining / X-RateLimit-Reset を付与、
 // 拒否時は 429 + Retry-After を返す。
-func NewMiddleware(store Store, cfg Config) func(http.Handler) http.Handler {
+func NewMiddleware(l limiter.Limiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID := r.Header.Get("X-User-ID")
@@ -19,7 +21,7 @@ func NewMiddleware(store Store, cfg Config) func(http.Handler) http.Handler {
 			}
 			key := fmt.Sprintf("user:%s:rl", userID)
 
-			result, err := store.Allow(r.Context(), key, cfg)
+			result, err := l.Allow(r.Context(), key)
 			if err != nil {
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return

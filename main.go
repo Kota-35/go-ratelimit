@@ -5,34 +5,47 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"go-ratelimit/ratelimit"
+	"go-ratelimit/ratelimit/limiter"
+	"go-ratelimit/ratelimit/storage"
 
 	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	algorithm := os.Getenv("ALGORITHM")
-
-	cfg := ratelimit.TokenBucketConfig{
-		Capacity:   10,
-		RefillRate: 1,
+	if algorithm == "" {
+		algorithm = "token_bucket"
 	}
-	log.Printf("config: capacity=%.0f refill_rate=%.2f/s", cfg.Capacity, cfg.RefillRate)
 
-	var store ratelimit.Store
+	var store storage.Storage
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
-		switch algorithm {
-		case "token_bucket":
-			store = ratelimit.NewRedisStoreTokenBucket(rdb)
-		default:
-			store = ratelimit.NewRedisStoreTokenBucket(rdb)
-		}
-		log.Printf("using RedisStore: %s", redisAddr)
+		store = storage.NewRedisStorage(rdb)
+		log.Printf("using RedisStorage: %s", redisAddr)
 	} else {
-		store = ratelimit.NewMemoryStoreMutex()
-		log.Println("using MemoryStore")
+		store = storage.NewMemoryStorage()
+		log.Println("using MemoryStorage")
+	}
+
+	var l limiter.Limiter
+	switch algorithm {
+	case "fixed_window":
+		cfg := limiter.FixedWindowConfig{
+			Limit:      10,
+			WindowSize: 60 * time.Second,
+		}
+		l = limiter.NewFixedWindowLimiter(store, cfg)
+		log.Printf("algorithm: fixed_window limit=%d window=%s", cfg.Limit, cfg.WindowSize)
+	default:
+		cfg := limiter.TokenBucketConfig{
+			Capacity:   10,
+			RefillRate: 1,
+		}
+		l = limiter.NewTokenBucketLimiter(store, cfg)
+		log.Printf("algorithm: token_bucket capacity=%.0f refill_rate=%.2f/s", cfg.Capacity, cfg.RefillRate)
 	}
 
 	mux := http.NewServeMux()
@@ -42,7 +55,7 @@ func main() {
 		fmt.Fprintf(w, "pong from %s\n", name)
 	})
 
-	handler := ratelimit.NewMiddleware(store, cfg)(mux)
+	handler := ratelimit.NewMiddleware(l)(mux)
 
 	addr := ":8080"
 	log.Printf("listening on %s", addr)

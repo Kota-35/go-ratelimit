@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"go-ratelimit/ratelimit"
+	"go-ratelimit/ratelimit/limiter"
+	"go-ratelimit/ratelimit/storage"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -102,32 +104,36 @@ func BenchmarkMemoryStoreSyncMap_AllowParallelMultiUser(b *testing.B) {
 	})
 }
 
-// --- Redis ---
+// --- RedisStorage ---
 
-func BenchmarkRedisStore_Allow(b *testing.B) {
+func BenchmarkRedisStorage_Allow(b *testing.B) {
 	mr := miniredis.RunT(b)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	store := ratelimit.NewRedisStoreTokenBucket(rdb)
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewRedisStorage(rdb),
+		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
+	)
 	ctx := context.Background()
-	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		store.Allow(ctx, "bench:user", cfg)
+		l.Allow(ctx, "bench:user")
 	}
 }
 
-func BenchmarkRedisStore_AllowParallel(b *testing.B) {
+func BenchmarkRedisStorage_AllowParallel(b *testing.B) {
 	mr := miniredis.RunT(b)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	store := ratelimit.NewRedisStoreTokenBucket(rdb)
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewRedisStorage(rdb),
+		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
+	)
 	ctx := context.Background()
-	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			store.Allow(ctx, "bench:user", cfg)
+			l.Allow(ctx, "bench:user")
 		}
 	})
 }
@@ -135,10 +141,12 @@ func BenchmarkRedisStore_AllowParallel(b *testing.B) {
 // ─── HTTP ミドルウェア (エンドツーエンド) ─────────────────────
 
 func BenchmarkMiddleware_Allow(b *testing.B) {
-	store := ratelimit.NewMemoryStoreMutex()
-	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewMemoryStorage(),
+		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
+	)
 
-	handler := ratelimit.NewMiddleware(store, cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ratelimit.NewMiddleware(l)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -153,10 +161,12 @@ func BenchmarkMiddleware_Allow(b *testing.B) {
 }
 
 func BenchmarkMiddleware_AllowParallel(b *testing.B) {
-	store := ratelimit.NewMemoryStoreMutex()
-	cfg := ratelimit.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9}
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewMemoryStorage(),
+		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
+	)
 
-	handler := ratelimit.NewMiddleware(store, cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ratelimit.NewMiddleware(l)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
