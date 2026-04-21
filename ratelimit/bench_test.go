@@ -2,8 +2,10 @@ package ratelimit_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"go-ratelimit/ratelimit"
@@ -13,6 +15,53 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
+
+// --- MemoryStorage ---
+
+func BenchmarkMemoryStorage_Allow(b *testing.B) {
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewMemoryStorage(),
+		limiter.TokenBucketConfig{Capacity: float64(b.N + 1), RefillRate: 1e9},
+	)
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.Allow(ctx, "bench:user")
+	}
+}
+
+func BenchmarkMemoryStorage_AllowParallel(b *testing.B) {
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewMemoryStorage(),
+		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
+	)
+	ctx := context.Background()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			l.Allow(ctx, "bench:user")
+		}
+	})
+}
+
+func BenchmarkMemoryStorage_AllowParallelMultiUser(b *testing.B) {
+	l := limiter.NewTokenBucketLimiter(
+		storage.NewMemoryStorage(),
+		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
+	)
+	ctx := context.Background()
+	var n atomic.Int64
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		key := fmt.Sprintf("bench:user:%d", n.Add(1))
+		for pb.Next() {
+			l.Allow(ctx, key)
+		}
+	})
+}
 
 // --- RedisStorage ---
 

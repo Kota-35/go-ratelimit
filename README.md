@@ -99,6 +99,12 @@ go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 
 | ベンチマーク | CPU数 | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
+| MemoryStorage_Allow | 1 | 66.87 | 24 | 1 |
+| MemoryStorage_Allow | 4 | 64.89 | 24 | 1 |
+| MemoryStorage_AllowParallel | 1 | 67.87 | 24 | 1 |
+| MemoryStorage_AllowParallel | 4 | 146.5 | 24 | 1 |
+| MemoryStorage_AllowParallelMultiUser | 1 | 67.82 | 24 | 1 |
+| MemoryStorage_AllowParallelMultiUser | 4 | 131.8 | 24 | 1 |
 | RedisStorage_Allow | 1 | 87,853 | 208,548 | 844 |
 | RedisStorage_Allow | 4 | 89,328 | 208,600 | 844 |
 | RedisStorage_AllowParallel | 1 | 86,585 | 208,548 | 844 |
@@ -109,6 +115,10 @@ go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 | Middleware_AllowParallel | 4 | 507.2 | 1,112 | 16 |
 
 </details>
+
+**MemoryStorage**
+
+in-memory なのでネットワーク IO がなく最速（約 67 ns/op）。グローバルな `sync.Mutex` 1 本で全キーを直列化するため、4 並列では約 2 倍悪化する。ユーザーが異なっていても同じロックを取り合う点は変わらない（MultiUser でも Parallel と同様に劣化）。
 
 **RedisStorage**
 
