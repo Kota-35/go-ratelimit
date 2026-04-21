@@ -15,3 +15,10 @@ type TokenBucketConfig struct {
 }
 
 func (TokenBucketConfig) configTag() {}
+
+type FixedWindowConfig struct {
+	Limit      int // ウィンドウ内の最大リクエスト数
+	WindowSecs int // ウィンドウのサイズ（秒）
+}
+
+func (FixedWindowConfig) configTag() {}
