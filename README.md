@@ -1,40 +1,35 @@
 # go-ratelimit
 
-Token Bucket / Fixed Window アルゴリズムを使ったレートリミッターの実装。
-複数サーバー間でトークン残量を共有するために Redis + Lua スクリプトを使っている。
+Token Bucket / Fixed Window / Sliding Window Counter アルゴリズムを使った分散レートリミッターの実装。
+
+## アルゴリズム
+
+| アルゴリズム | 特徴 | 向いているケース |
+|---|---|---|
+| Token Bucket | バースト上限が明示的・滑らか | API の一般的なレート制限 |
+| Fixed Window | シンプル・軽量 | 厳密な秒/分単位の制限 |
+| Sliding Window Counter | バースト抑制・Fixed Window の境界問題を緩和 | Fixed Window より精度が必要な場面 |
 
 ## 構成
 
 ![architecture](docs/architecture.png)
 
-nginx がリクエストを api1/api2 に振り分け、両サーバーが同一の Redis を参照してトークン状態を共有する。
+nginx がリクエストを api1/api2 に振り分け、両サーバーが同一の Redis に `EVALSHA` でアクセスしてレート状態を共有する。
 
-ストアは `storage.Storage` / `limiter.Limiter` の 2 層で抽象化されており、`REDIS_ADDR` 環境変数の有無で MemoryStorage と RedisStorage を切り替えられる。`ALGORITHM` 環境変数でアルゴリズムを選択できる。
-
-## なぜ Lua スクリプトが必要か
-
-Redis のトークン補充は `GET → 計算 → SET` の 3 操作になる。
-これを素直に実装すると、2 サーバーが同時に `GET` した瞬間に同じ残量を読み、両方が消費を確定させてしまう。
-
-```
-api1: GET tokens=1 → 許可と判断
-api2: GET tokens=1 → 許可と判断  ← 同じ値を読んでいる
-api1: SET tokens=0
-api2: SET tokens=0              ← 2リクエスト許可されてしまう
-```
-
-`EVALSHA` で 3 操作を 1 トランザクションにまとめることで、Redis 側で直列実行が保証される。
+実装は `storage.Storage`（状態の読み書き）と `limiter.Limiter`（アルゴリズム）の2層構成。`REDIS_ADDR` の有無で MemoryStorage/RedisStorage を、`ALGORITHM` でアルゴリズムを切り替えられる。
 
 ## 設定
 
 | 環境変数 | デフォルト | 説明 |
 |---|---|---|
-| `ALGORITHM` | `token_bucket` | アルゴリズム。`token_bucket` / `fixed_window` |
+| `ALGORITHM` | `token_bucket` | アルゴリズム。`token_bucket` / `fixed_window` / `sliding_window_counter` |
 | `REDIS_ADDR` | (未設定) | Redis のアドレス。未設定の場合は MemoryStorage を使う |
 
 ```bash
-# docker compose で値を変えて起動
+# docker compose でアルゴリズムを指定して起動
 ALGORITHM=token_bucket docker compose -f redis.docker-compose.yml up --build
+ALGORITHM=fixed_window docker compose -f redis.docker-compose.yml up --build
+ALGORITHM=sliding_window_counter docker compose -f redis.docker-compose.yml up --build
 
 # ローカル単体起動
 ALGORITHM=fixed_window go run .
@@ -43,14 +38,14 @@ ALGORITHM=fixed_window go run .
 ## 動作確認
 
 ```bash
-# Redis版 (複数インスタンスでトークン状態を共有)
+# Redis版 (複数インスタンスでレート状態を共有)
 docker compose -f redis.docker-compose.yml up --build
 
 # Memory版 (インスタンスごとに独立したカウンター)
 docker compose -f memory.docker-compose.yml up --build
 ```
 
-起動後、15回連打して 200 → 429 の遷移を確認:
+起動後、連打して 200 → 429 の遷移を確認:
 
 ```bash
 for i in $(seq 1 15); do
@@ -59,25 +54,24 @@ for i in $(seq 1 15); do
 done
 ```
 
-**Redis版** (capacity=10): 10回で制限、api1/api2をまたいでカウントが共有される
+**Redis版**（複数インスタンスで状態を共有）: 設定した上限に達すると 429 が返る。api1/api2 をまたいでカウントが共有される。
 
 ```
 [200] pong from api1
 [200] pong from api2
 ...
-[200] pong from api2   # 10回目
+[200] pong from api2
 [429] 429 Too Many Requests
 [429] 429 Too Many Requests
-...
 ```
 
-**Memory版** (capacity=10): インスタンスごとに独立カウンターなので15回では制限に達しない
+**Memory版**（インスタンスごとに独立）: インスタンスごとに独立したカウンターなので、15回では上限に達しにくい。
 
 ```
 [200] pong from api1
 [200] pong from api2
 ...
-[200] pong from api1   # 15回目も200
+[200] pong from api1
 ```
 
 レスポンスヘッダー:
@@ -89,8 +83,12 @@ done
 ```bash
 # 単体テスト + race detector
 go test ./... -race -v
+```
 
-# ベンチマーク (CPU数を変えて並列スケーラビリティを比較)
+## ベンチマーク
+
+```bash
+# CPU数を変えて並列スケーラビリティを比較
 go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 ```
 
@@ -116,26 +114,39 @@ go test ./ratelimit/... -bench=. -benchmem -benchtime=5s -cpu=1,4
 
 </details>
 
+### 考察
+
 **MemoryStorage**
 
 in-memory なのでネットワーク IO がなく最速（約 67 ns/op）。グローバルな `sync.Mutex` 1 本で全キーを直列化するため、4 並列では約 2 倍悪化する。ユーザーが異なっていても同じロックを取り合う点は変わらない（MultiUser でも Parallel と同様に劣化）。
 
 **RedisStorage**
 
-Redis はシングルスレッドで処理するため、複数 goroutine から同時にリクエストが来ても Redis 側でキューイングされる。そのため並列化しても速度がほぼ変わらない。一方でネットワーク IO や Lua スクリプトの送受信コストがあるため、約 88,000 ns/op となる。複数サーバー間でトークン状態を共有できるのはこのコストの対価。
+Redis はシングルスレッドで処理するため、複数 goroutine から同時にリクエストが来ても Redis 側でキューイングされる。そのため並列化しても速度がほぼ変わらない。一方でネットワーク IO や Lua スクリプトの送受信コストがあるため、約 88,000 ns/op となる。複数サーバー間でレート状態を共有できるのはこのコストの対価。
 
 **Middleware**
 
 `Allow()` の呼び出しに加え、`fmt.Sprintf` によるキー生成・`strconv` による数値→文字列変換・レスポンスヘッダーへのセットなどのアロケーションが発生する。MemoryStorage 単体と比較して追加コストが生じ、約 772 ns/op・16 allocs/op はこれらのコストを反映している。
 
----
+## 実装ノート
 
-### +α: sync.Map によるキー分散の技術的考察
+### 原子性の担保（Lua スクリプト）
 
-MemoryStorage は `sync.Mutex` 1 本で全キーの読み書きを直列化している。キーが異なるユーザーでも同じロックを取り合うため、ユーザー数が増えても並列スケーラビリティは改善しない。
+Redis でのレート状態更新は `GET → 計算 → SET` の複数操作になる。素直に実装すると、2 サーバーが同時に `GET` した瞬間に同じ値を読み、両方が消費を確定させてしまう TOCTOU 問題が発生する。
 
-この問題への対策として `sync.Map` + per-bucket lock 構成が考えられる。`sync.Map` でキーごとに独立した `*bucketState`（各々が `sync.Mutex` を持つ）を管理すれば、異なるキーの処理が互いにブロックしない。MultiUser 並列では約 3 倍のスループット向上が見込める。
+```
+api1: GET tokens=1 → 許可と判断
+api2: GET tokens=1 → 許可と判断  ← 同じ値を読んでいる
+api1: SET tokens=0
+api2: SET tokens=0              ← 2リクエスト許可されてしまう
+```
 
-ただし `sync.Map` 版は `LoadOrStore` のたびに `*bucketState` をヒープ確保するコストが発生し（約 64 B/2 allocs）、単一ユーザーへの連続アクセスでは Mutex 版より遅い。キー数が多く競合が分散するケースでのみ有利になる。
+`EVALSHA` で複数操作を 1 トランザクションにまとめることで、Redis 側で直列実行を保証している。この設計は Token Bucket / Fixed Window / Sliding Window Counter の全アルゴリズムに共通して適用している。
 
-このリポジトリの主眼は**分散環境での Redis を使った状態共有**であり、シングルサーバーの並列最適化は本質的な関心事ではない。また Redis を使う本番構成ではメモリストアはフォールバックに過ぎず、ここでの並列性能に投資するより、Redis の Lua atomicity（TOCTOU 排除）を正しく実装する方が価値が高い。これらのトレードオフから、現実装ではシンプルな `sync.Mutex` を採用している。
+### MemoryStorage のロック設計
+
+MemoryStorage は `sync.Mutex` 1 本で全キーの読み書きを直列化している。キーが異なるユーザーでも同じロックを取り合うため、並列スケーラビリティは低い。
+
+対策として `sync.Map` + per-key lock 構成が考えられる。異なるキーの処理が互いにブロックしなくなり、MultiUser 並列では約 3 倍のスループット向上が見込める。ただし `LoadOrStore` のたびにヒープ確保が発生し、単一ユーザーへの連続アクセスでは Mutex 版より遅い。
+
+このリポジトリの主眼は**分散環境での Redis を使った状態共有**であり、シングルサーバーの並列最適化は本質的な関心事ではない。Redis を使う本番構成ではメモリストアはフォールバックに過ぎず、Lua による原子性の担保を正しく実装する方が価値が高い。これらのトレードオフから、現実装ではシンプルな `sync.Mutex` を採用している。
