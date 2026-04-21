@@ -39,6 +39,13 @@ func main() {
 		}
 		l = limiter.NewFixedWindowLimiter(store, cfg)
 		log.Printf("algorithm: fixed_window limit=%d window=%s", cfg.Limit, cfg.WindowSize)
+	case "sliding_window_counter":
+		cfg := limiter.SlidingWindowCounterConfig{
+			Limit:      10,
+			WindowSize: 60 * time.Second,
+		}
+		l = limiter.NewSlidingWindowCounterConfig(store, cfg)
+		log.Printf("algorithm: sliding_window_counter limit=%d window=%s", cfg.Limit, cfg.WindowSize)
 	default:
 		cfg := limiter.TokenBucketConfig{
 			Capacity:   10,

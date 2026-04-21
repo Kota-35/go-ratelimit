@@ -9,9 +9,6 @@ import (
 	"go-ratelimit/ratelimit/storage"
 )
 
-// mockStorage はアルゴリズムの正しさを持たない最小限のスタブ。
-// storage 層のテストがアルゴリズムを担保するので、limiter 層では
-// 「正しい args を組み立てているか」「結果を正しくマッピングしているか」だけを検証する。
 type mockStorage struct {
 	gotKey  string
 	gotArgs storage.RunArgs

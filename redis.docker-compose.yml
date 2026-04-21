@@ -14,8 +14,7 @@ services:
     environment:
       SERVER_NAME: api1
       REDIS_ADDR: redis:6379
-      CAPACITY: ${CAPACITY:-10}
-      REFILL_RATE: ${REFILL_RATE:-1}
+      ALGORITHM: sliding_window_counter
     depends_on:
       - redis
 
@@ -24,8 +23,7 @@ services:
     environment:
       SERVER_NAME: api2
       REDIS_ADDR: redis:6379
-      CAPACITY: ${CAPACITY:-10}
-      REFILL_RATE: ${REFILL_RATE:-1}
+      ALGORITHM: sliding_window_counter
     depends_on:
       - redis
 
