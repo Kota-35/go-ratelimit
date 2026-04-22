@@ -11,6 +11,7 @@ import (
 	"go-ratelimit/ratelimit/limiter"
 	"go-ratelimit/ratelimit/storage"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -21,11 +22,14 @@ func main() {
 	}
 
 	var store storage.Storage
+	var storageKind string
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 		store = storage.NewRedisStorage(rdb)
+		storageKind = "redis"
 		log.Printf("using RedisStorage: %s", redisAddr)
 	} else {
+		storageKind = "memory"
 		store = storage.NewMemoryStorage()
 		log.Println("using MemoryStorage")
 	}
@@ -61,8 +65,9 @@ func main() {
 		w.Header().Set("X-Server-ID", name)
 		fmt.Fprintf(w, "pong from %s\n", name)
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 
-	handler := ratelimit.NewMiddleware(l)(mux)
+	handler := ratelimit.NewMiddleware(l, algorithm, storageKind)(mux)
 
 	addr := ":8080"
 	log.Printf("listening on %s", addr)

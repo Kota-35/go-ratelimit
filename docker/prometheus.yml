@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "ratelimit-api"
+    static_configs:
+      - targets:
+          - "api1:8080"
+          - "api2:8080"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance

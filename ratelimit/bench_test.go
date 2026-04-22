@@ -105,7 +105,7 @@ func BenchmarkMiddleware_Allow(b *testing.B) {
 		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
 	)
 
-	handler := ratelimit.NewMiddleware(l)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ratelimit.NewMiddleware(l, "token_bucket", "memory")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -125,7 +125,7 @@ func BenchmarkMiddleware_AllowParallel(b *testing.B) {
 		limiter.TokenBucketConfig{Capacity: 1e12, RefillRate: 1e9},
 	)
 
-	handler := ratelimit.NewMiddleware(l)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ratelimit.NewMiddleware(l, "token_bucket", "memory")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
