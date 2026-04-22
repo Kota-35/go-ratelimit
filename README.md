@@ -1,6 +1,8 @@
 # go-ratelimit
+---
+[![codecov](https://codecov.io/gh/Kota-35/go-ratelimit/graph/badge.svg?token=JBZI061ARU)](https://codecov.io/gh/Kota-35/go-ratelimit)
 
-Token Bucket / Fixed Window / Sliding Window Counter アルゴリズムを使った分散レートリミッターの実装。
+Redis Lua スクリプト（EVALSHA）で TOCTOU 競合を排除した、スケール対応のプロダクション想定の分散レートリミッター
 
 ## アルゴリズム
 
